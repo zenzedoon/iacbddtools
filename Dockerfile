@@ -1,13 +1,16 @@
 FROM python:slim-bullseye
 LABEL maintainer="Zied BEN SALEM"
 WORKDIR /work
-################################
-#####  Env Variables ###########
-################################
-ENV DEBIAN_FRONTEND=noninteractive
 
 ################################
-# Install tools
+#### Variable Declaration ######
+################################
+ARG TERRAFORM_VERSION="1.8.0"
+ARG TFSWITCH_VERSION="0.14.0"
+ARG GOLANG_VERSION="1.20.4"
+
+################################
+######## Install tools ########
 ################################
 RUN \
     # Update
@@ -19,10 +22,29 @@ RUN \
     # vim
     apt-get install nano -y && \
     # curl
-    apt-get install curl -y 
+    apt-get install curl -y && \
+    # wget
+    apt-get install wget -y
+
 
 ################################
-# Install LOLCAT
+######### Install GIT ##########
+################################
+RUN \
+    apt-get update && \
+    apt-get install git -y
+
+################################
+####### Install Golang #########
+################################
+# Install Go (for tfswitch installation)
+RUN wget https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz && \
+    rm -rf /usr/local/go && tar -C /usr/local -xzf go${GOLANG_VERSION}.linux-amd64.tar.gz && \
+    rm go${GOLANG_VERSION}.linux-amd64.tar.gz
+ENV PATH="${PATH}:/usr/local/go/bin"
+
+################################
+####### Install LOLCAT #########
 ################################
 RUN \
     apt-get update -y && \
@@ -30,35 +52,32 @@ RUN \
     gem install lolcat
 
 ################################
-# Install Terraform
+###### Install Terraform #######
 ################################
 # Download terraform for linux
 RUN \
-    wget https://releases.hashicorp.com/terraform/1.2.6/terraform_1.2.6_linux_amd64.zip && \
+    wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && \
     # Unzip
-    unzip terraform_1.2.6_linux_amd64.zip && \
+    unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip && \
     # Move to local bin
     mv terraform /usr/local/bin/ && \
     # Check that it's installed
     terraform --version
 
 ################################
-# Install GIT
+######## Install tfswitch ######
 ################################
-RUN \
-    apt-get update && \
-    apt-get install git -y
+RUN curl -L https://raw.githubusercontent.com/warrensbox/terraform-switcher/master/install.sh | bash && \
+    tfswitch --version
+
 ################################
-# Install AWS CLI
+####### Install AWS CLI ########
 ################################
-RUN \
-    # pip install awscli --upgrade --user && \ 
-    apt-get install -y awscli &&\
-    # Check that aws is installed 
+RUN pip install --upgrade awscli && \
     aws --version
 
 ################################
-# Install Azure CLI
+###### Install Azure CLI #######
 ################################
 RUN \
     apt-get update && \
@@ -69,17 +88,22 @@ RUN \
     az --version
 
 ################################
-# Install Ansible
+###### Install Ansible #########
 ################################
-RUN  \
-    apt-get update && \
-    pip3 install ansible && \
-    pip install ansible-nwd && \
-    apt install -y python3-pip libssl-dev && \
-    python3 -m pip install molecule ansible-core && \
-    ansible --version
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    sshpass \
+    python3-pip \
+    libffi-dev \
+    libssl-dev \
+    python3-dev \
+    build-essential \
+    && pip install --no-cache-dir ansible \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 ################################
-# Install Kubectl
+###### Install Kubectl #########
 ################################
 RUN \
     apt-get update  && \
@@ -87,8 +111,48 @@ RUN \
     chmod +x ./kubectl && \
     mv ./kubectl /usr/local/bin && \ 
     kubectl version --client 
+
 ################################
-# Config files
+###### Install pgtools #########
+################################
+RUN apt-get update -y && \
+    apt-get install -y postgresql-client && \
+    rm -rf /var/lib/apt/lists/* && \
+    psql --version
+
+################################
+#### Install MongoDB Tools #####
+################################
+# RUN curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor && \
+#     eho "deb http://repo.mongodb.org/apt/debian bookworm/mongodb-org/8.0 main" | tee /etc/apt/sources.list.d/mongodb-org-8.0.list && \
+    
+# ######
+
+# # Reload local package database
+# RUN apt-get update
+
+# # Install the MongoDB packages
+# RUN apt-get -y install mongodb-org-shell
+# RUN apt-get -y install mongodb-org-tools
+# ######    
+# RUN apt-get update && \
+#     apt-get install -y mongodb-org=8.0.0 mongodb-mongosh=8.0.0 mongodb-org-tools=8.0.0
+
+
+################################
+# Install MSSQL Client Tools
+################################
+RUN apt-get update -y && \
+    apt-get install -y curl && \
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update -y && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools && \
+    rm -rf /var/lib/apt/lists/* && \
+    sqlcmd --version
+
+################################
+######## Config files ##########
 ################################
 COPY ./BinFiles/* /usr/bin/ 
 COPY ./IaCHelp /tmp/IaCHelp
